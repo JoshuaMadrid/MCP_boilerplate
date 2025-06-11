@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # Python MCP Server
+  mcp-python:
+    build:
+      context: ./python-server
+      dockerfile: Dockerfile
+    environment:
+      - REQUIRE_AUTH=false
+      - JWT_SECRET=development-secret-key
+      - ALLOWED_DOMAINS=example.com,httpbin.org,jsonplaceholder.typicode.com
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_WINDOW=3600
+    volumes:
+      - ./shared-data:/tmp/shared
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # TypeScript MCP Server  
+  mcp-typescript:
+    build:
+      context: ./typescript-server
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development
+      - REQUIRE_AUTH=false
+      - JWT_SECRET=development-secret-key
+      - ALLOWED_DOMAINS=example.com,httpbin.org,jsonplaceholder.typicode.com
+      - PORT=3000
+    volumes:
+      - ./shared-data:/tmp/shared
+    ports:
+      - "3000:3000"
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Java MCP Server
+  mcp-java:
+    build:
+      context: ./java-server
+      dockerfile: Dockerfile
+    environment:
+      - SPRING_PROFILES_ACTIVE=development
+      - MCP_REQUIRE_AUTH=false
+      - MCP_JWT_SECRET=development-secret-key
+      - MCP_ALLOWED_DOMAINS=example.com,httpbin.org,jsonplaceholder.typicode.com
+      - SERVER_PORT=8080
+    volumes:
+      - ./shared-data:/tmp/shared
+    ports:
+      - "8080:8080"
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis (for production-ready rate limiting)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL (for production database)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=mcpdb
+      - POSTGRES_USER=mcpuser
+      - POSTGRES_PASSWORD=mcppassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcpuser -d mcpdb"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx (reverse proxy and load balancer)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - mcp-typescript
+      - mcp-java
+    networks:
+      - mcp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  shared_data:
+
+networks:
+  mcp-network:
+    driver: bridge 
