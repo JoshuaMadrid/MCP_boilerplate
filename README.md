@@ -1,5 +1,7 @@
 # MCP Tools Boilerplate
 
+> 🔒 **Private Repository** - This is a private implementation of the MCP boilerplate with enterprise features and security configurations.
+
 A comprehensive, production-ready boilerplate for building Model Context Protocol (MCP) tools with complete implementations in Python, TypeScript, and Java.
 
 ## Overview
